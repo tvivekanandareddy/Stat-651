@@ -1,0 +1,129 @@
+---
+title: "Stat. 650: Project"
+author: "Vivekananda Reddy Thummala, Shiva Bandari, Sowmya Kichayagari"
+date: "October 13, 2023"
+format: 
+  html: 
+    self-contained: true
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(psych)
+library(rsample)
+```
+
+## Data Loading
+
+```{r}
+heart <- read.csv('~/Downloads/heart.csv',sep = ',')
+```
+
+## Data cleaning
+
+```{r}
+set.seed(07)
+heart_1 <- 
+  heart |> 
+  select(MaxHR, Cholesterol, HeartDisease, Age, RestingBP, ChestPainType, Sex) |> 
+  mutate(Cholesterol = replace(Cholesterol, Cholesterol == 0, NA),
+         HeartDisease = factor(HeartDisease, labels = c("No","Yes")),
+         ChestPainType = factor(ChestPainType),
+         Sex = factor(Sex, labels = c("Female","Male")))
+heart_1 <- 
+  heart_1 |> 
+  mutate(ChestPainType = fct_recode(ChestPainType,
+                              "Asymptomatic" = "ASY",
+                              "Atypical Angina" = "ATA",
+                              "Non-Anginal Pain" = "NAP",
+                              "Typical Angina" = "TA"))
+
+filter(heart_1, is.na(Cholesterol))
+heart_1<-na.omit(heart_1)
+heart_split <- initial_split(heart_1, prop = 0.75)
+heart_train <- training(heart_split)
+heart_testing <- testing(heart_split)
+```
+
+## Data Statistics:
+
+Overall
+
+```{r}
+heart_1 |> 
+  summarise_if(is.numeric,c(mean=mean,sd=sd),na.rm=TRUE)
+Frequency_cat_heart_1 <- function(x) {
+  table(x)/nrow(heart_1)}
+apply(heart_1[,c(3,6,7)],2,table)
+apply(heart_1[,c(3,6,7)],2,Frequency_cat_heart_1)
+#Co-relation matrix
+cor_data <- heart_1 |> 
+  select(MaxHR,Cholesterol,Age, RestingBP)
+par(mar = c(1, 1, 1, 1))
+corPlot(cor_data)
+
+
+```
+
+## Graph:
+
+```{r}
+#Graph With respective Sex
+ggplot(data = heart_1,aes(x = Cholesterol, y = MaxHR, color = Sex)) +
+  geom_point()+
+  geom_smooth()+
+  labs(x = expression(bold("Cholesterol of Subject[mm/dl]")),
+       y = expression(bold("Heart Rate of Subject[60 and 202]")),
+       title = expression(bold("       Scatter plot of Cholesterol vs Heart Rate with respective Sex")))
+
+#Graph With respective ChestPainType
+ggplot(data = heart_1,aes(x = Cholesterol, y = MaxHR)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(vars(HeartDisease))+
+  labs(x = expression(bold("Cholesterol of Subject[mm/dl]")),
+       y = expression(bold("Heart Rate of Subject[60 and 202]")),
+       title = expression(bold("    Scatter plot of Cholesterol vs Heart Rate with respective Heart Disease")))
+
+
+ggplot(data = heart_1) +
+  geom_bar(aes(x = ChestPainType, fill = HeartDisease), position = "dodge")+
+  labs(x = expression(bold("Chest Pain Type of Subject")),
+       y = expression(bold("Count")),
+       title = expression(bold("   Bar plot of Chest Pain Type vs Count with respective Heart Disease")))
+
+ggplot(data = heart_1,aes(x = Age, y = RestingBP)) +
+  geom_point()+
+  geom_smooth()+
+  labs(x = expression(bold("Age of Subject")),
+       y = expression(bold("Resting blood pressure of Subject")),
+       title = expression(bold("         Scatter plot of Age vs Resting blood pressure of subjects")))
+
+```
+
+## Regression model:
+
+```{r}
+mod <- glm(HeartDisease ~ ., data = heart_train,family=binomial)
+summary(mod)
+```
+
+## Result
+
+```{r}
+#confusion matrix
+probs_test <- predict(mod, newdata = heart_testing, type = "response")
+length(probs_test)
+preds_test <- rep(0, length(probs_test))
+preds_test[probs_test > 0.5] <- 1
+tb <- table(prediction = preds_test, actual = heart_testing$HeartDisease)
+addmargins(tb)
+# Accuracy (percent correctly classified)
+(tb[1,1] + tb[2,2]) / 187
+# Sensitivity (percent of cardio (1) correctly classified)
+tb[2,2] / 99
+# Specificity (percent of cardio (0) correctly classified)
+ tb[1,1] / 88
+```
